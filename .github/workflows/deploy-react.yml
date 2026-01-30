@@ -1,3 +1,4 @@
+# workflow이름 - 작업이름
 name: Deploy Vite React to EC2
 
 # Event설정하기
@@ -12,7 +13,7 @@ on:
 jobs:
   ec2deploy:
     runs-on: ubuntu-latest
-
+    # Job안에서 실행될 내용들
     steps: #특정 작업을 수행하는 가장 작은 단위
       - name: EC2서버에 접속하기 #step에 붙이는 이름
         uses: appleboy/ssh-action@v1 #실행시킬 리눅스 명령어 작성
@@ -21,7 +22,9 @@ jobs:
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_PRIVATE_KEY }}
           script: |
+            #실행 중 한 줄이라도 에러가 발생하면 즉시 중단
             set -e
+            #실행 중 이력을 출력하는 코드 추가
             set -x
 
             APP_DIR=/home/ubuntu/vite-react-app
@@ -40,3 +43,16 @@ jobs:
             git pull origin main
             # 2)의존성 설치 -> package-lock.json기준
             npm ci
+
+            # 3)기존 서버 종료(포트 기준으로 강제 kill하기)
+            # 실행 중이 아니더라도 실패하지 않도록 true옵션 추가
+            sudo fuser -k -n tcp ${DEV_PORT} || true
+
+            # 4)서버 백그라운드 기동
+            # --host 0.0.0.0 : 외부 접속 허용
+            # 로그는 dev.log파일로 저장
+            nohup npm run dev -- --host 0.0.0.0 --port ${DEV_PORT} > dev.log 2>&1 &
+
+            # 5)기동 확인(로그/포트 체크)
+            sleep 2
+            sudo fuser -n tcp ${DEV_PROT} || (ehco "server not running" && exit 1)
